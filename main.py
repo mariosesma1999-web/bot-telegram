@@ -11,18 +11,13 @@ from telegram.ext import (
     filters,
 )
 
-# ==============================================================================
-# CONFIGURACIÓN (REEMPLAZA AQUÍ TUS DATOS)
-# ==============================================================================
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN", "8861377510:AAEHZDnWElNKk43ee8zpIn5R0V1y4vpMhLU"
-)  # Token que te dio BotFather
+# Configuración
+BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
 API_BEARER_TOKEN = os.getenv(
     "API_BEARER_TOKEN", "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a"
 )
-ADMIN_PIN = "1234"  # Tu PIN secreto de administrador para vincular/modificar
+ADMIN_PIN = "1234"
 DB_FILE = "dispositivos.json"
-# ==============================================================================
 
 logging.basicConfig(level=logging.INFO)
 
@@ -100,6 +95,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def vincular_o_modificar_id(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
+    # Borra inmediatamente el mensaje enviado con la clave
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     chat_id = str(update.effective_chat.id)
 
     if len(context.args) != 2:
@@ -119,17 +120,23 @@ async def vincular_o_modificar_id(
     reply_markup = ReplyKeyboardMarkup(teclado, resize_keyboard=True)
 
     await update.message.reply_text(
-        f"✅ *ID de suscripción guardado:* `{sub_id_ingresado}`",
+        f"✅ *ID guardado y activado correctamente.*",
         parse_mode="Markdown",
         reply_markup=reply_markup,
     )
 
 
 async def desvincular_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Borra inmediatamente el mensaje enviado con la clave
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
     chat_id = str(update.effective_chat.id)
 
     if len(context.args) != 1 or context.args[0] != ADMIN_PIN:
-        await update.message.reply_text("❌ Sintaxis o PIN incorrecto.")
+        await update.message.reply_text("❌ PIN incorrecto.")
         return
 
     eliminar_vinculacion(chat_id)
