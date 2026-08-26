@@ -11,13 +11,18 @@ from telegram.ext import (
     filters,
 )
 
-# Configuración
-BOT_TOKEN = os.getenv("BOT_TOKEN", "TU_TOKEN_AQUI")
+# ==============================================================================
+# CONFIGURACIÓN COMPLETA
+# ==============================================================================
+BOT_TOKEN = os.getenv(
+    "BOT_TOKEN", "8861377510:AAEHZDnWElNKk43ee8zpIn5R0V1y4vpMhLU"
+)  # O tu token directo si no usas env
 API_BEARER_TOKEN = os.getenv(
     "API_BEARER_TOKEN", "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a"
 )
 ADMIN_PIN = "1234"
 DB_FILE = "dispositivos.json"
+# ==============================================================================
 
 logging.basicConfig(level=logging.INFO)
 
@@ -95,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def vincular_o_modificar_id(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    # Borra inmediatamente el mensaje enviado con la clave
+    # Borra inmediatamente el mensaje enviado por el instalador para ocultar el PIN
     try:
         await update.message.delete()
     except Exception:
@@ -127,7 +132,7 @@ async def vincular_o_modificar_id(
 
 
 async def desvincular_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Borra inmediatamente el mensaje enviado con la clave
+    # Borra inmediatamente el mensaje enviado por el instalador para ocultar el PIN
     try:
         await update.message.delete()
     except Exception:
