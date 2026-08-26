@@ -15,11 +15,15 @@ from telegram.ext import (
 # CONFIGURACIÓN COMPLETA
 # ==============================================================================
 BOT_TOKEN = os.getenv(
-    "BOT_TOKEN", "8861377510:AAEHZDnWElNKk43ee8zpIn5R0V1y4vpMhLU"
-)  # O tu token directo si no usas env
-API_BEARER_TOKEN = os.getenv(
-    "API_BEARER_TOKEN", "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a"
+    "BOT_TOKEN", "TU_TOKEN_DE_BOTFATHER_AQUI"
 )
+
+# Lista con tus dos tokens de API
+API_BEARER_TOKENS = [
+    "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a",  # Token Cuenta 1
+    "1671|M0nQp3SuyoQiaAkjD4qfraaJmyWB37UNJBM5ZQOgb83e43bd",                       # Token Cuenta 2
+]
+
 ADMIN_PIN = "1234"
 DB_FILE = "dispositivos.json"
 # ==============================================================================
@@ -54,29 +58,41 @@ def eliminar_vinculacion(chat_id: str):
 
 def consultar_api(sub_id: str) -> str:
     url = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {API_BEARER_TOKEN}",
-    }
+    
+    # Bucle que prueba con cada token de la lista
+    for token in API_BEARER_TOKENS:
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        }
 
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
 
-        if response.status_code == 200:
-            data = response.json()
-            return (
-                "=== DATOS DE LA SUSCRIPCIÓN ===\n\n"
-                f"👤 *Usuario:* `{data.get('username', 'N/A')}`\n"
-                f"🔑 *Contraseña:* `{data.get('password', 'N/A')}`\n"
-                f"📅 *Expiración:* `{data.get('expiring_at', 'N/A')}`\n\n"
-                f"🌐 *DNS Estándar:* `{data.get('dns_link', 'N/A')}`\n"
-                f"📺 *DNS Samsung / LG:* `{data.get('dns_link_for_samsung_lg', 'N/A')}`"
-            )
-        else:
-            return f"❌ Error al consultar la API (Código: {response.status_code})"
+            # Si encuentra la suscripción con este token
+            if response.status_code == 200:
+                data = response.json()
+                return (
+                    "=== DATOS DE LA SUSCRIPCIÓN ===\n\n"
+                    f"👤 *Usuario:* `{data.get('username', 'N/A')}`\n"
+                    f"🔑 *Contraseña:* `{data.get('password', 'N/A')}`\n"
+                    f"📅 *Expiración:* `{data.get('expiring_at', 'N/A')}`\n\n"
+                    f"🌐 *DNS Estándar:* `{data.get('dns_link', 'N/A')}`\n"
+                    f"📺 *DNS Samsung / LG:* `{data.get('dns_link_for_samsung_lg', 'N/A')}`"
+                )
+            
+            # Si da error de permisos (401/403) o no encuentra el ID (404), prueba con el siguiente token de la lista
+            elif response.status_code in (401, 403, 404):
+                continue
 
-    except Exception as e:
-        return f"⚠️ Error de conexión: {str(e)}"
+            else:
+                return f"❌ Error al consultar la API (Código HTTP: {response.status_code})"
+
+        except Exception as e:
+            continue
+
+    # Si recorre todos los tokens y ninguno funcionó
+    return "❌ No se encontraron datos para este ID en ninguna de las cuentas configuradas."
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -100,7 +116,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def vincular_o_modificar_id(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    # Borra inmediatamente el mensaje enviado por el instalador para ocultar el PIN
     try:
         await update.message.delete()
     except Exception:
@@ -132,7 +147,6 @@ async def vincular_o_modificar_id(
 
 
 async def desvincular_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Borra inmediatamente el mensaje enviado por el instalador para ocultar el PIN
     try:
         await update.message.delete()
     except Exception:
