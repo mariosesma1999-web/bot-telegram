@@ -15,7 +15,7 @@ from telegram.ext import (
 # CONFIGURACIÓN (REEMPLAZA AQUÍ TUS DATOS)
 # ==============================================================================
 BOT_TOKEN = os.getenv(
-    "BOT_TOKEN", "AQUI_TU_TOKEN_DE_BOTFATHER"
+    "BOT_TOKEN", "8861377510:AAEHZDnWElNKk43ee8zpIn5R0V1y4vpMhLU"
 )  # Token que te dio BotFather
 API_BEARER_TOKEN = os.getenv(
     "API_BEARER_TOKEN", "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a"
