@@ -4,7 +4,6 @@ import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Activar logging para ver las peticiones HTTP en la consola de TrueNAS
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -28,6 +27,11 @@ def load_data():
 
 
 def save_data(data):
+    # Asegura que la carpeta contenedora exista antes de escribir el archivo
+    dir_name = os.path.dirname(DB_FILE)
+    if dir_name and not os.path.exists(dir_name):
+        os.makedirs(dir_name, exist_ok=True)
+
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
@@ -69,7 +73,14 @@ async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     devices = load_data()
     devices[user_id] = dev_name
     save_data(devices)
-    await update.message.reply_text(f"✅ Dispositivo '{dev_name}' registrado correctamente.")
+    
+    keyboard = [
+        ["📲 Solicitar o renovar línea"],
+        ["🔄 Refrescar Códigos"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(f"✅ Dispositivo '{dev_name}' registrado correctamente.", reply_markup=reply_markup)
 
 
 async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,7 +104,7 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in devices:
         removed = devices.pop(user_id)
         save_data(devices)
-        await update.message.reply_text(f"🗑️ Tu dispositivo '{removed}' ha sido eliminado.")
+        await update.message.reply_text(f"🗑️ Tu dispositivo '{removed}' ha sido eliminado.", reply_markup=ReplyKeyboardRemove())
     else:
         await update.message.reply_text("⚠️ Este dispositivo no está registrado.")
 
@@ -104,7 +115,6 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
     devices = load_data()
     username_str = f"@{user.username}" if user.username else "Sin username"
 
-    # Si ya está registrado en el JSON
     if user_id in devices:
         device_name = devices[user_id]
         await update.message.reply_text(
@@ -119,8 +129,6 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
                 f"💬 *Chat Directo:* [Abrir conversación](tg://user?id={user.id})"
             )
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
-
-    # Si NO está registrado (Usuario nuevo)
     else:
         contact_button = KeyboardButton(text="📱 Compartir mi número de teléfono", request_contact=True)
         reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
