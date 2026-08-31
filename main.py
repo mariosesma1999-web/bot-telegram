@@ -30,8 +30,9 @@ def save_data(data):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Comando /start"""
-    user_id = str(update.effective_user.id)
+    """Maneja el comando /start con el menú principal."""
+    user = update.effective_user
+    user_id = str(user.id)
     devices = load_data()
 
     is_registered = user_id in devices
@@ -48,31 +49,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg = (
             "Bienvenido/a al bot de gestión de líneas.\n\n"
-            "Si ya tienes una línea asignada y deseas vincular este dispositivo, utiliza:\n"
-            "`/setid <PIN> <NombreDispositivo>`\n\n"
-            "Si eres un nuevo usuario o quieres renovar, pulsa el botón de abajo."
+            "Si deseas vincular tu dispositivo con un PIN, usa:\n"
+            "`/setid <PIN> <Nombre_Opcional>`\n\n"
+            "Si deseas renovar o solicitar una nueva línea, pulsa el botón de abajo."
         )
 
     await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Asocia un ID de Telegram a una línea/dispositivo usando el PIN."""
-    user_id = str(update.effective_user.id)
+    """Vincular dispositivo con PIN."""
+    user = update.effective_user
+    user_id = str(user.id)
     args = context.args
 
-    if len(args) < 2:
+    if not args:
         await update.message.reply_text(
-            "⚠️ *Uso incorrecto.*\nDebes escribir: `/setid <PIN> <NombreDispositivo>`\n"
-            "Ejemplo: `/setid 1234 MovilMario`",
+            "⚠️ *Formato incorrecto.*\nEscribe: `/setid <PIN> <Nombre_Opcional>`\nEjemplo: `/setid 1234 MovilMario`",
             parse_mode="Markdown"
         )
         return
 
-    pin = args[0]
-    dev_name = " ".join(args[1:])
+    pin = args[0].strip()
+    dev_name = " ".join(args[1:]).strip() if len(args) > 1 else (user.first_name or "Usuario")
 
-    if pin != ADMIN_PIN:
+    if pin != str(ADMIN_PIN).strip():
         await update.message.reply_text("❌ *PIN incorrecto.*", parse_mode="Markdown")
         return
 
@@ -80,63 +81,68 @@ async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     devices[user_id] = dev_name
     save_data(devices)
 
+    keyboard = [
+        ["📲 Solicitar o renovar línea"],
+        ["🔄 Refrescar Códigos"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
     await update.message.reply_text(
-        f"✅ *Dispositivo vinculado con éxito.*\n"
-        f"🆔 ID de Telegram: `{user_id}`\n"
-        f"🏷️ Nombre: *{dev_name}*",
+        f"✅ *¡Dispositivo vinculado con éxito!*\n\n"
+        f"👤 *Nombre registrado:* {dev_name}\n"
+        f"🆔 *ID Telegram:* `{user_id}`\n\n"
+        f"Ya puedes solicitar o renovar tus líneas normalmente.",
+        reply_markup=reply_markup,
         parse_mode="Markdown"
     )
 
 
 async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Elimina la vinculación del dispositivo actual o de un usuario específico."""
-    user_id = str(update.effective_user.id)
+    """Desvincular dispositivo."""
+    user = update.effective_user
+    user_id = str(user.id)
     args = context.args
     devices = load_data()
 
-    # Si se pasa un PIN y un ID (Ejemplo: /borrarid <PIN> <ID_TELEGRAM>)
-    if len(args) == 2:
-        pin, target_id = args[0], args[1]
-        if pin != ADMIN_PIN:
+    # Opción Admin: /borrarid <PIN> <ID_TELEGRAM>
+    if len(args) >= 2:
+        pin = args[0].strip()
+        target_id = args[1].strip()
+        
+        if pin != str(ADMIN_PIN).strip():
             await update.message.reply_text("❌ *PIN incorrecto.*", parse_mode="Markdown")
             return
-        
+
         if target_id in devices:
             removed_name = devices.pop(target_id)
             save_data(devices)
-            await update.message.reply_text(
-                f"🗑️ *Dispositivo eliminado.*\nSe ha desvinculado a: *{removed_name}* (`{target_id}`).",
-                parse_mode="Markdown"
-            )
+            await update.message.reply_text(f"🗑️ Se ha borrado el ID `{target_id}` ({removed_name}).", parse_mode="Markdown")
         else:
-            await update.message.reply_text("⚠️ Ese ID de Telegram no está en el registro.")
+            await update.message.reply_text("⚠️ Ese ID no se encuentra en la base de datos.")
         return
 
-    # Si el usuario quiere desvincular su propio dispositivo
+    # Opción Usuario: Borra su propia línea
     if user_id in devices:
         removed_name = devices.pop(user_id)
         save_data(devices)
-        await update.message.reply_text(
-            f"🗑️ Tu dispositivo *{removed_name}* ha sido desvinculado correctamente.",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(f"🗑️ Tu línea/dispositivo *{removed_name}* ha sido eliminada del registro.", parse_mode="Markdown")
     else:
         await update.message.reply_text("⚠️ Este dispositivo no estaba registrado.")
 
 
 async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja la solicitud de línea."""
+    """Gestiona la solicitud según si el usuario está en dispositivos.json o no."""
     user = update.effective_user
     user_id = str(user.id)
     devices = load_data()
     username_str = f"@{user.username}" if user.username else "Sin username"
 
-    # Caso A: Dispositivo Registrado
+    # CASO 1: El usuario YA está registrado en dispositivos.json
     if user_id in devices:
         device_name = devices[user_id]
+        
         await update.message.reply_text(
-            f"✅ Solicitud recibida para tu línea/dispositivo: *{device_name}*.\n"
-            f"Un administrador revisará la renovación.",
+            f"✅ Gracias {user.first_name}. Hemos notificado al administrador tu solicitud de renovación para la línea/dispositivo: *{device_name}*.",
             parse_mode="Markdown"
         )
 
@@ -151,9 +157,9 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
             try:
                 await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
             except Exception as e:
-                print(f"Error al avisar al admin: {e}")
+                print(f"Error enviando aviso al admin: {e}")
 
-    # Caso B: Usuario No Registrado
+    # CASO 2: Usuario NUEVO (No está registrado)
     else:
         contact_button = KeyboardButton(text="📱 Compartir mi número de teléfono", request_contact=True)
         reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
@@ -165,7 +171,7 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
 
 
 async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recibe el teléfono enviado por un usuario no registrado."""
+    """Recibe el teléfono de un usuario no registrado y lo envía al admin."""
     contact = update.message.contact
     user = update.effective_user
     username_str = f"@{user.username}" if user.username else "Sin username"
@@ -187,7 +193,7 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
         except Exception as e:
-            print(f"Error al enviar contacto al admin: {e}")
+            print(f"Error enviando contacto al admin: {e}")
 
 
 if __name__ == "__main__":
@@ -201,7 +207,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("setid", set_id))
     app.add_handler(CommandHandler("borrarid", borrar_id))
 
-    # Handlers de mensajes y contactos
+    # Handlers para mensajes de texto y botones de contacto
     app.add_handler(MessageHandler(filters.Regex("^📲 Solicitar o renovar línea$"), handle_renovacion_request))
     app.add_handler(MessageHandler(filters.CONTACT, receive_contact))
 
