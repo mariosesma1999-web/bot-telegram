@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import requests
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -14,6 +15,7 @@ DB_FILE = "/app_data/dispositivos.json"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+API_TOKEN = os.getenv("API_TOKEN", "TU_TOKEN_DE_MEGAOTT_AQUI")  # Reemplaza o pasa por ENV
 
 
 def load_data():
@@ -44,7 +46,6 @@ def get_main_keyboard():
 
 
 async def delete_user_message_safety(update: Update):
-    """Intenta borrar el mensaje del usuario que contiene credenciales o PIN."""
     try:
         await update.message.delete()
     except Exception as e:
@@ -54,26 +55,24 @@ async def delete_user_message_safety(update: Update):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     devices = load_data()
-
-    # Se muestran las opciones SIEMPRE independientemente de si está registrado
     reply_markup = get_main_keyboard()
 
     if user_id not in devices:
         await update.message.reply_text(
             "⛔ Este dispositivo no está registrado.\n"
-            "Puedes usar `/setid <PIN> <Nombre>` para vincularlo o solicitar/renovar tu línea abajo.",
+            "Usa `/setid <PIN> <ID_Suscripcion>` para registrarte.",
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
     else:
         await update.message.reply_text(
-            f"Bienvenido {devices[user_id]}. ¿Qué deseas hacer?",
+            f"Bienvenido. Tu ID de suscripción registrado es: `{devices[user_id]}`",
+            parse_mode="Markdown",
             reply_markup=reply_markup
         )
 
 
 async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Borrar mensaje del usuario por seguridad (PIN expuesto)
     await delete_user_message_safety(update)
 
     user_id = str(update.effective_user.id)
@@ -81,33 +80,30 @@ async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(args) < 2:
         await update.message.reply_text(
-            "⚠️ Uso correcto: `/setid <PIN> <NombreDispositivo>`",
+            "⚠️ Uso correcto: `/setid <PIN> <ID_Suscripcion>`",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
         return
 
-    pin, dev_name = args[0], " ".join(args[1:])
+    pin, sub_id = args[0], args[1]
 
     if pin != ADMIN_PIN:
-        await update.message.reply_text(
-            "❌ PIN incorrecto.",
-            reply_markup=get_main_keyboard()
-        )
+        await update.message.reply_text("❌ PIN incorrecto.", reply_markup=get_main_keyboard())
         return
 
     devices = load_data()
-    devices[user_id] = dev_name
+    devices[user_id] = sub_id
     save_data(devices)
 
     await update.message.reply_text(
-        f"✅ Dispositivo '{dev_name}' registrado correctamente.",
+        f"✅ Dispositivo registrado correctamente con la suscripción ID: `{sub_id}`",
+        parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
 
 
 async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Borrar mensaje del usuario por seguridad si llevaba PIN
     await delete_user_message_safety(update)
 
     user_id = str(update.effective_user.id)
@@ -122,10 +118,7 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if target_id in devices:
             removed = devices.pop(target_id)
             save_data(devices)
-            await update.message.reply_text(
-                f"🗑️ Dispositivo '{removed}' ({target_id}) eliminado.",
-                reply_markup=get_main_keyboard()
-            )
+            await update.message.reply_text(f"🗑️ Registro ({target_id}) eliminado.", reply_markup=get_main_keyboard())
         else:
             await update.message.reply_text("⚠️ ID no encontrado.", reply_markup=get_main_keyboard())
         return
@@ -133,10 +126,7 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in devices:
         removed = devices.pop(user_id)
         save_data(devices)
-        await update.message.reply_text(
-            f"🗑️ Tu dispositivo '{removed}' ha sido eliminado.",
-            reply_markup=get_main_keyboard()
-        )
+        await update.message.reply_text("🗑️ Tu suscripción vinculada ha sido eliminada.", reply_markup=get_main_keyboard())
     else:
         await update.message.reply_text("⚠️ Este dispositivo no está registrado.", reply_markup=get_main_keyboard())
 
@@ -148,18 +138,50 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
     if user_id not in devices:
         await update.message.reply_text(
             "⛔ Necesitas estar registrado para solicitar códigos.\n"
-            "Usa `/setid <PIN> <Nombre>` primero.",
+            "Usa `/setid <PIN> <ID_Suscripcion>` primero.",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
         return
 
-    # TODO: Aquí puedes colocar tu código / llamada a API para refrescar o enviar los códigos
-    await update.message.reply_text(
-        f"🔄 Buscando códigos actualizados para *{devices[user_id]}*...",
-        parse_mode="Markdown",
-        reply_markup=get_main_keyboard()
-    )
+    sub_id = devices[user_id]
+    url = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
+    headers = {
+        "Authorization": f"Bearer {API_TOKEN}"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Extraer campos de la respuesta JSON de MegaOTT
+            username = data.get("username", "N/A")
+            password = data.get("password", "N/A")
+            dns_link = data.get("dns_link", "N/A")
+            expiring_at = data.get("expiring_at", "N/A")
+            
+            msg = (
+                f"📺 *TUS DATOS DE ACCESO*\n\n"
+                f"👤 *Usuario:* `{username}`\n"
+                f"🔑 *Contraseña:* `{password}`\n"
+                f"🌐 *URL / Server:* `{dns_link}`\n"
+                f"📅 *Caduca el:* `{expiring_at}`"
+            )
+            
+            await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        else:
+            await update.message.reply_text(
+                f"⚠️ Error al obtener datos de la API (Código HTTP: {response.status_code}).",
+                reply_markup=get_main_keyboard()
+            )
+    except Exception as e:
+        logging.error(f"Error consultando la API MegaOTT: {e}")
+        await update.message.reply_text(
+            "❌ No se pudo conectar con el servidor. Inténtalo de nuevo en unos minutos.",
+            reply_markup=get_main_keyboard()
+        )
 
 
 async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,9 +191,9 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
     username_str = f"@{user.username}" if user.username else "Sin username"
 
     if user_id in devices:
-        device_name = devices[user_id]
+        sub_id = devices[user_id]
         await update.message.reply_text(
-            f"✅ Solicitud enviada para la línea: *{device_name}*.",
+            f"✅ Solicitud enviada para la línea/ID: *{sub_id}*.",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
@@ -179,7 +201,7 @@ async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAUL
             admin_msg = (
                 f"🔄 *SOLICITUD DE RENOVACIÓN*\n\n"
                 f"👤 *Usuario:* {user.first_name} ({username_str})\n"
-                f"🏷️ *Dispositivo:* `{device_name}`\n"
+                f"🏷️ *ID Suscripción:* `{sub_id}`\n"
                 f"💬 *Chat Directo:* [Abrir conversación](tg://user?id={user.id})"
             )
             await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
