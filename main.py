@@ -1,198 +1,160 @@
 import json
-import logging
 import os
-import requests
-from telegram import ReplyKeyboardMarkup, Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ==============================================================================
-# CONFIGURACIÓN COMPLETA
-# ==============================================================================
-BOT_TOKEN = os.getenv(
-    "BOT_TOKEN", "8861377510:AAEHZDnWElNKk43ee8zpIn5R0V1y4vpMhLU"
-)
+# Ruta de persistencia dentro del contenedor TrueNAS
+DB_FILE = "/app_data/dispositivos.json"
 
-# Lista con tus dos tokens de API
-API_BEARER_TOKENS = [
-    "1670|tCrGynE1Af0SwECk5keF65dGMOBkko7sZCvn5blH60276d2a",  # Token Cuenta 1
-    "1671|M0nQp3SuyoQiaAkjD4qfraaJmyWB37UNJBM5ZQOgb83e43bd",                       # Token Cuenta 2
-]
-
-ADMIN_PIN = "1234"
-DB_FILE = "dispositivos.json"
-# ==============================================================================
-
-logging.basicConfig(level=logging.INFO)
+# Variables de entorno seguras (configuradas en la app de TrueNAS)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
 
-def cargar_vinculaciones() -> dict:
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
+def load_data():
+    """Carga el registro de dispositivos."""
+    if not os.path.exists(DB_FILE):
+        return {}
+    try:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
-def guardar_vinculacion(chat_id: str, sub_id: str):
-    datos = cargar_vinculaciones()
-    datos[str(chat_id)] = str(sub_id)
-    with open(DB_FILE, "w") as f:
-        json.dump(datos, f, indent=4)
-
-
-def eliminar_vinculacion(chat_id: str):
-    datos = cargar_vinculaciones()
-    if str(chat_id) in datos:
-        del datos[str(chat_id)]
-        with open(DB_FILE, "w") as f:
-            json.dump(datos, f, indent=4)
-
-
-def consultar_api(sub_id: str) -> str:
-    url = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
-    
-    # Bucle que prueba con cada token de la lista
-    for token in API_BEARER_TOKENS:
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-        }
-
-        try:
-            response = requests.get(url, headers=headers, timeout=10)
-
-            # Si encuentra la suscripción con este token
-            if response.status_code == 200:
-                data = response.json()
-                return (
-                    "=== DATOS DE LA SUSCRIPCIÓN ===\n\n"
-                    f"👤 *Usuario:* `{data.get('username', 'N/A')}`\n"
-                    f"🔑 *Contraseña:* `{data.get('password', 'N/A')}`\n"
-                    f"📅 *Expiración:* `{data.get('expiring_at', 'N/A')}`\n\n"
-                    f"🌐 *DNS Estándar:* `{data.get('dns_link', 'N/A')}`\n"
-                    f"📺 *DNS Samsung / LG:* `{data.get('dns_link_for_samsung_lg', 'N/A')}`"
-                )
-            
-            # Si da error de permisos (401/403) o no encuentra el ID (404), prueba con el siguiente token de la lista
-            elif response.status_code in (401, 403, 404):
-                continue
-
-            else:
-                return f"❌ Error al consultar la API (Código HTTP: {response.status_code})"
-
-        except Exception as e:
-            continue
-
-    # Si recorre todos los tokens y ninguno funcionó
-    return "❌ No se encontraron datos para este ID en ninguna de las cuentas configuradas."
+def save_data(data):
+    """Guarda los cambios en dispositivos.json."""
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = str(update.effective_chat.id)
-    vinculaciones = cargar_vinculaciones()
+    """Maneja el comando /start con el menú principal."""
+    user_id = str(update.effective_user.id)
+    devices = load_data()
 
-    if chat_id in vinculaciones:
-        teclado = [["🔄 Refrescar Códigos"]]
-        reply_markup = ReplyKeyboardMarkup(teclado, resize_keyboard=True)
-        await update.message.reply_text(
-            "👋 Bienvenido. Usa el botón inferior para consultar tus datos.",
-            reply_markup=reply_markup,
-        )
+    is_registered = user_id in devices
+    device_label = devices[user_id] if is_registered else "No registrado"
+
+    # Teclado visible para todos los usuarios
+    keyboard = [
+        ["📲 Solicitar o renovar línea"],
+        ["🔄 Refrescar Códigos"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    if is_registered:
+        msg = f"Bienvenido/a *{device_label}*. ¿Qué deseas hacer?"
     else:
-        await update.message.reply_text(
-            "🔒 *Dispositivo no configurado*\n\nEl instalador debe ingresar el código de activación.",
-            parse_mode="Markdown",
+        msg = (
+            "Bienvenido/a al bot de gestión de líneas.\n\n"
+            "Si deseas renovar o solicitar una nueva línea, pulsa el botón de abajo."
         )
 
+    await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode="Markdown")
 
-async def vincular_o_modificar_id(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
 
-    chat_id = str(update.effective_chat.id)
+async def set_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando para que un administrador registre o vincule un dispositivo."""
+    user_id = str(update.effective_user.id)
+    args = context.args
 
-    if len(context.args) != 2:
-        await update.message.reply_text(
-            "⚠️ Formato incorrecto. Uso: `/setid PIN ID`", parse_mode="Markdown"
-        )
+    if len(args) < 2:
+        await update.message.reply_text("Uso correcto: /setid <PIN> <NombreDispositivo>")
         return
 
-    pin_ingresado, sub_id_ingresado = context.args[0], context.args[1]
+    pin = args[0]
+    dev_name = " ".join(args[1:])
 
-    if pin_ingresado != ADMIN_PIN:
-        await update.message.reply_text("❌ PIN de administrador incorrecto.")
-        return
-
-    guardar_vinculacion(chat_id, sub_id_ingresado)
-    teclado = [["🔄 Refrescar Códigos"]]
-    reply_markup = ReplyKeyboardMarkup(teclado, resize_keyboard=True)
-
-    await update.message.reply_text(
-        f"✅ *ID guardado y activado correctamente.*",
-        parse_mode="Markdown",
-        reply_markup=reply_markup,
-    )
-
-
-async def desvincular_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
-    chat_id = str(update.effective_chat.id)
-
-    if len(context.args) != 1 or context.args[0] != ADMIN_PIN:
+    if pin != ADMIN_PIN:
         await update.message.reply_text("❌ PIN incorrecto.")
         return
 
-    eliminar_vinculacion(chat_id)
-    await update.message.reply_text("🗑️ Dispositivo desvinculado con éxito.")
+    devices = load_data()
+    devices[user_id] = dev_name
+    save_data(devices)
+
+    await update.message.reply_text(f"✅ Dispositivo '{dev_name}' registrado e identificado correctamente.")
 
 
-async def refrescar_datos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = str(update.effective_chat.id)
-    vinculaciones = cargar_vinculaciones()
+async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Gestiona la solicitud según si el usuario tiene ID guardado o no."""
+    user = update.effective_user
+    user_id = str(user.id)
+    devices = load_data()
+    username_str = f"@{user.username}" if user.username else "Sin username"
 
-    if chat_id not in vinculaciones:
+    # CASO 1: El usuario YA está registrado (tiene línea/dispositivo asignado)
+    if user_id in devices:
+        device_name = devices[user_id]
+        
         await update.message.reply_text(
-            "🛑 Este dispositivo no está autorizado."
+            f"✅ Gracias {user.first_name}. Hemos notificado al administrador tu solicitud de renovación para la línea/dispositivo: *{device_name}*.",
+            parse_mode="Markdown"
         )
-        return
 
-    sub_id = vinculaciones[chat_id]
-    await update.message.reply_text("⏳ Consultando servidor...")
-    resultado = consultar_api(sub_id)
-    await update.message.reply_text(resultado, parse_mode="Markdown")
+        if ADMIN_CHAT_ID:
+            admin_msg = (
+                f"🔄 *SOLICITUD DE RENOVACIÓN (USUARIO REGISTRADO)*\n\n"
+                f"👤 *Usuario:* {user.first_name} ({username_str})\n"
+                f"🏷️ *Línea / Dispositivo:* `{device_name}`\n"
+                f"🆔 *Telegram ID:* `{user.id}`\n"
+                f"💬 *Chat Directo:* [Abrir conversación](tg://user?id={user.id})"
+            )
+            try:
+                await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
+            except Exception as e:
+                print(f"Error enviando aviso al admin: {e}")
 
+    # CASO 2: Usuario NUEVO (No está en el JSON)
+    else:
+        # Le pedimos compartir su número de teléfono con botón nativo
+        contact_button = KeyboardButton(text="📱 Compartir mi número de teléfono", request_contact=True)
+        reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
 
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setid", vincular_o_modificar_id))
-    app.add_handler(CommandHandler("borrarid", desvincular_id))
-    app.add_handler(
-        MessageHandler(
-            filters.Regex("^🔄 Refrescar Códigos$"), refrescar_datos
+        await update.message.reply_text(
+            "Para gestionar tu nueva línea, por favor pulsa el botón de abajo para compartir tu número de teléfono:",
+            reply_markup=reply_markup
         )
+
+
+async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe el teléfono de un usuario no registrado y te envía sus datos."""
+    contact = update.message.contact
+    user = update.effective_user
+    username_str = f"@{user.username}" if user.username else "Sin username"
+
+    reply_markup = ReplyKeyboardRemove()
+    await update.message.reply_text(
+        "✅ Gracias. Tu solicitud ha sido enviada al administrador. Se pondrá en contacto contigo muy pronto.",
+        reply_markup=reply_markup
     )
 
-    print("🤖 Bot listo...")
-    app.run_polling()
+    if ADMIN_CHAT_ID:
+        admin_msg = (
+            f"🆕 *NUEVA SOLICITUD DE LÍNEA (USUARIO NUEVO)*\n\n"
+            f"👤 *Usuario:* {user.first_name} ({username_str})\n"
+            f"📞 *Teléfono:* `{contact.phone_number}`\n"
+            f"🆔 *Telegram ID:* `{user.id}`\n"
+            f"💬 *Chat Directo:* [Abrir conversación](tg://user?id={user.id})"
+        )
+        try:
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"Error enviando contacto al admin: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN no configurado en las variables de entorno.")
+
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("setid", set_id))
+    app.add_handler(MessageHandler(filters.Regex("^📲 Solicitar o renovar línea$"), handle_renovacion_request))
+    app.add_handler(MessageHandler(filters.CONTACT, receive_contact))
+
+    print("🤖 Bot listo y escuchando peticiones...")
+    app.run_polling()
