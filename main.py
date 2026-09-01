@@ -337,8 +337,8 @@ async def handle_guia_callbacks(update: Update, context: ContextTypes.DEFAULT_TY
 
         # Preparamos el grupo de imágenes en álbum (MediaGroup)
         media = [
-            InputMediaPhoto(media=IMAGENES_CONFIGURACION[0], caption="⚙️ *PASOS DE CONFIGURACIÓN*\n\n1. Sigue las instrucciones de cada captura.", parse_mode="Markdown"),
-            InputMediaPhoto(media=IMAGENES_CONFIGURACION[1])
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[1], caption="⚙️ *PASOS DE CONFIGURACIÓN*\n\n1. Sigue las instrucciones de cada captura.", parse_mode="Markdown"),
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[0])
         ]
 
         # Enviamos las 3 imágenes en un solo mensaje de tipo álbum
