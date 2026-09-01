@@ -63,8 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_id not in devices:
         await update.message.reply_text(
-            "⛔ Este dispositivo no está registrado.\n"
-            "Usa `/setid <PIN> <ID_Suscripcion>` para registrarte.",
+            "⛔ Este dispositivo no está registrado.\n",
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
