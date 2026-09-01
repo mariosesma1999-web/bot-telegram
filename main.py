@@ -2,8 +2,21 @@ import json
 import os
 import logging
 import requests
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import (
+    Update, 
+    ReplyKeyboardMarkup, 
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton, 
+    InputMediaPhoto
+)
+from telegram.ext import (
+    ApplicationBuilder, 
+    CommandHandler, 
+    MessageHandler, 
+    CallbackQueryHandler, 
+    filters, 
+    ContextTypes
+)
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -12,14 +25,26 @@ logging.basicConfig(
 
 DB_FILE = "/app_data/dispositivos.json"
 
-# Carga de variables de entorno desde la configuración del contenedor
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
-# Lee la lista de tokens separada por comas desde la variable API_TOKENS
 raw_tokens = os.getenv("API_TOKENS", "")
 API_TOKENS = [token.strip() for token in raw_tokens.split(",") if token.strip()]
+
+# -------------------------------------------------------------------
+# ENLACES Y RECURSOS DE LA GUÍA (Personaliza con tus URLs/IDs de imagen)
+# -------------------------------------------------------------------
+URL_APK_ANDROID = "https://apkpure.com/es/search?q=Smarters+Player+Lite"
+URL_APP_WINDOWS = "https://apps.microsoft.com/detail/9nrp2lhsh4mf?hl=es-ES&gl=ES"
+URL_VIDEO_SMARTTV = "https://www.youtube.com/watch?v=_45J8kBu2CY"
+
+# URLs o File IDs de las 3 imágenes de configuración
+IMAGENES_CONFIGURACION = [
+    "https://via.placeholder.com/800x600.png?text=Paso+1+Configuracion",
+    "https://via.placeholder.com/800x600.png?text=Paso+2+Configuracion",
+    "https://via.placeholder.com/800x600.png?text=Paso+3+Configuracion"
+]
 
 
 def load_data():
@@ -44,7 +69,8 @@ def save_data(data):
 def get_main_keyboard():
     keyboard = [
         ["📲 Solicitar o renovar línea"],
-        ["🔄 Refrescar Códigos"]
+        ["🔄 Refrescar Códigos"],
+        ["📖 Guía"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -56,6 +82,34 @@ async def delete_user_message_safety(update: Update):
         logging.warning(f"No se pudo borrar el mensaje del usuario: {e}")
 
 
+# -------------------------------------------------------------------
+# MENÚS INLINE PARA LA SECCIÓN "GUÍA"
+# -------------------------------------------------------------------
+def menu_guia_principal():
+    keyboard = [
+        [InlineKeyboardButton("📱 Apps", callback_data="guia_apps")],
+        [InlineKeyboardButton("⚙️ Configuración", callback_data="guia_config")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def menu_guia_apps():
+    keyboard = [
+        [InlineKeyboardButton("🤖 Android (APK)", url=URL_APK_ANDROID)],
+        [InlineKeyboardButton("💻 Windows", url=URL_APP_WINDOWS)],
+        [InlineKeyboardButton("📺 Smart TV (Vídeo)", url=URL_VIDEO_SMARTTV)],
+        [InlineKeyboardButton("⬅️ Volver a Guía", callback_data="guia_inicio")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def menu_volver_guia():
+    keyboard = [
+        [InlineKeyboardButton("⬅️ Volver a Guía", callback_data="guia_inicio")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     devices = load_data()
@@ -63,7 +117,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_id not in devices:
         await update.message.reply_text(
-            "⛔ Este dispositivo no está registrado.\n",
+            "⛔ Este dispositivo no está registrado.\n"
+            "Usa `/setid <PIN> <ID_Suscripcion>` para registrarte.",
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
@@ -135,7 +190,6 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def fetch_subscription(sub_id: str):
-    """Itera sobre la lista de API_TOKENS enviada desde las variables de entorno."""
     for idx, token in enumerate(API_TOKENS):
         headers = {
             "Authorization": f"Bearer {token}",
@@ -197,6 +251,7 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
             reply_markup=get_main_keyboard()
         )
 
+
 async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = str(user.id)
@@ -247,18 +302,77 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_msg, parse_mode="Markdown")
 
 
+# -------------------------------------------------------------------
+# LÓGICA DE MANEJO DE LA GUÍA
+# -------------------------------------------------------------------
+async def handle_guia_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Responde al botón del teclado principal '📖 Guía'"""
+    await update.message.reply_text(
+        "📚 *GUÍA DE INSTALACIÓN Y CONFIGURACIÓN*\n\nSelecciona una opción del menú:",
+        parse_mode="Markdown",
+        reply_markup=menu_guia_principal()
+    )
+
+
+async def handle_guia_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja los clics en los botones interactivos del menú Guía"""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "guia_inicio":
+        await query.edit_message_text(
+            "📚 *GUÍA DE INSTALACIÓN Y CONFIGURACIÓN*\n\nSelecciona una opción del menú:",
+            parse_mode="Markdown",
+            reply_markup=menu_guia_principal()
+        )
+
+    elif query.data == "guia_apps":
+        await query.edit_message_text(
+            "📱 *DESCARGA DE APLICACIONES*\n\nElige la plataforma donde vas a usar el servicio:",
+            parse_mode="Markdown",
+            reply_markup=menu_guia_apps()
+        )
+
+    elif query.data == "guia_config":
+        await query.edit_message_text("⏳ Cargando imágenes de configuración...")
+
+        # Preparamos el grupo de imágenes en álbum (MediaGroup)
+        media = [
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[0], caption="⚙️ *PASOS DE CONFIGURACIÓN*\n\n1. Sigue las instrucciones de cada captura.", parse_mode="Markdown"),
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[1]),
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[2])
+        ]
+
+        # Enviamos las 3 imágenes en un solo mensaje de tipo álbum
+        await context.bot.send_media_group(chat_id=query.message.chat_id, media=media)
+        
+        # Enviamos un mensaje final con botón para poder regresar
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="¿Quieres volver al menú anterior?",
+            reply_markup=menu_volver_guia()
+        )
+
+
 if __name__ == "__main__":
     if not BOT_TOKEN:
         raise ValueError("Error: BOT_TOKEN no está definido en las variables de entorno.")
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Handlers de comandos
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("setid", set_id))
     app.add_handler(CommandHandler("borrarid", borrar_id))
+    
+    # Handlers de mensajes de texto (Botones de pantalla)
     app.add_handler(MessageHandler(filters.Regex("^📲 Solicitar o renovar línea$"), handle_renovacion_request))
     app.add_handler(MessageHandler(filters.Regex("^🔄 Refrescar Códigos$"), handle_refrescar_codigos))
+    app.add_handler(MessageHandler(filters.Regex("^📖 Guía$"), handle_guia_button))
     app.add_handler(MessageHandler(filters.CONTACT, receive_contact))
+
+    # Handler para los botones interactivos inline
+    app.add_handler(CallbackQueryHandler(handle_guia_callbacks))
 
     print("🤖 Bot listo...")
     app.run_polling()
