@@ -165,8 +165,7 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
 
     if user_id not in devices:
         await update.message.reply_text(
-            "⛔ Necesitas estar registrado para solicitar códigos.\n"
-            "Usa `/setid <PIN> <ID_Suscripcion>` primero.",
+            "⛔ Necesitas estar registrado para solicitar códigos.\n",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
