@@ -15,7 +15,7 @@ DB_FILE = "/app_data/dispositivos.json"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
-API_TOKEN = os.getenv("API_TOKEN", "TU_TOKEN_DE_MEGAOTT_AQUI")  # Reemplaza o pasa por ENV
+API_TOKEN = os.getenv("API_TOKEN", "TU_TOKEN_DE_MEGAOTT_AQUI")
 
 
 def load_data():
@@ -145,18 +145,24 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
         return
 
     sub_id = devices[user_id]
-    url = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
+    url = f"https://megaott.net/api/v1/subscriptions/{sub_id}/"
     headers = {
-        "Authorization": f"Bearer {API_TOKEN}"
+        "Authorization": f"Bearer {API_TOKEN}",
+        "Accept": "application/json"
     }
 
     try:
+        logging.info(f"Consultando API MegaOTT: {url}")
         response = requests.get(url, headers=headers, timeout=10)
         
+        if response.status_code == 404:
+            url_alt = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
+            logging.info(f"404 detectado. Reintentando consulta sin barra: {url_alt}")
+            response = requests.get(url_alt, headers=headers, timeout=10)
+
         if response.status_code == 200:
             data = response.json()
             
-            # Extraer campos de la respuesta JSON de MegaOTT
             username = data.get("username", "N/A")
             password = data.get("password", "N/A")
             dns_link = data.get("dns_link", "N/A")
@@ -172,8 +178,11 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
             
             await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
         else:
+            logging.error(f"Error API MegaOTT HTTP {response.status_code}: {response.text}")
             await update.message.reply_text(
-                f"⚠️ Error al obtener datos de la API (Código HTTP: {response.status_code}).",
+                f"⚠️ Error al obtener datos de la API (Código HTTP: {response.status_code}).\n"
+                f"Asegúrate de que el ID guardado (`{sub_id}`) sea el ID numérico interno de la suscripción.",
+                parse_mode="Markdown",
                 reply_markup=get_main_keyboard()
             )
     except Exception as e:
