@@ -12,15 +12,14 @@ logging.basicConfig(
 
 DB_FILE = "/app_data/dispositivos.json"
 
+# Carga de variables de entorno desde la configuración del contenedor
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
-# Lista de API Keys a probar en orden
-API_TOKENS = [
-    os.getenv("API_TOKEN", "TU_TOKEN_PRINCIPAL_AQUI"),
-    "1692|56aovuPEV7fK9K11YIXRU5pj57gGjoIXeAJE6QVN5931824c"
-]
+# Lee la lista de tokens separada por comas desde la variable API_TOKENS
+raw_tokens = os.getenv("API_TOKENS", "")
+API_TOKENS = [token.strip() for token in raw_tokens.split(",") if token.strip()]
 
 
 def load_data():
@@ -137,14 +136,13 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def fetch_subscription(sub_id: str):
-    """Prueba a obtener la suscripción iterando sobre la lista de API Tokens."""
+    """Itera sobre la lista de API_TOKENS enviada desde las variables de entorno."""
     for idx, token in enumerate(API_TOKENS):
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/json"
         }
         
-        # Probamos primero la URL con barra final y luego sin ella
         urls = [
             f"https://megaott.net/api/v1/subscriptions/{sub_id}/",
             f"https://megaott.net/api/v1/subscriptions/{sub_id}"
@@ -152,7 +150,7 @@ async def fetch_subscription(sub_id: str):
 
         for url in urls:
             try:
-                logging.info(f"Probando token index {idx} en URL: {url}")
+                logging.info(f"Probando token índice {idx} en URL: {url}")
                 response = requests.get(url, headers=headers, timeout=10)
                 if response.status_code == 200:
                     return response.json()
@@ -194,7 +192,7 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
     else:
         await update.message.reply_text(
-            f"⚠️ No se encontraron datos para el ID (`{sub_id}`) en ninguna de las cuentas registradas.",
+            f"⚠️ No se encontraron datos para el ID (`{sub_id}`) en ninguna de las cuentas vinculadas.",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
@@ -251,6 +249,9 @@ async def receive_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
+    if not BOT_TOKEN:
+        raise ValueError("Error: BOT_TOKEN no está definido en las variables de entorno.")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
