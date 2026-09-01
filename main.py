@@ -15,7 +15,12 @@ DB_FILE = "/app_data/dispositivos.json"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_PIN = os.getenv("ADMIN_PIN", "1234")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
-API_TOKEN = os.getenv("API_TOKEN", "TU_TOKEN_DE_MEGAOTT_AQUI")
+
+# Lista de API Keys a probar en orden
+API_TOKENS = [
+    os.getenv("API_TOKEN", "TU_TOKEN_PRINCIPAL_AQUI"),
+    "1692|56aovuPEV7fK9K11YIXRU5pj57gGjoIXeAJE6QVN5931824c"
+]
 
 
 def load_data():
@@ -131,6 +136,32 @@ async def borrar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Este dispositivo no está registrado.", reply_markup=get_main_keyboard())
 
 
+async def fetch_subscription(sub_id: str):
+    """Prueba a obtener la suscripción iterando sobre la lista de API Tokens."""
+    for idx, token in enumerate(API_TOKENS):
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json"
+        }
+        
+        # Probamos primero la URL con barra final y luego sin ella
+        urls = [
+            f"https://megaott.net/api/v1/subscriptions/{sub_id}/",
+            f"https://megaott.net/api/v1/subscriptions/{sub_id}"
+        ]
+
+        for url in urls:
+            try:
+                logging.info(f"Probando token index {idx} en URL: {url}")
+                response = requests.get(url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    return response.json()
+            except Exception as e:
+                logging.error(f"Error consultando la API en {url}: {e}")
+
+    return None
+
+
 async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     devices = load_data()
@@ -145,50 +176,26 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
         return
 
     sub_id = devices[user_id]
-    url = f"https://megaott.net/api/v1/subscriptions/{sub_id}/"
-    headers = {
-        "Authorization": f"Bearer {API_TOKEN}",
-        "Accept": "application/json"
-    }
+    data = await fetch_subscription(sub_id)
 
-    try:
-        logging.info(f"Consultando API MegaOTT: {url}")
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 404:
-            url_alt = f"https://megaott.net/api/v1/subscriptions/{sub_id}"
-            logging.info(f"404 detectado. Reintentando consulta sin barra: {url_alt}")
-            response = requests.get(url_alt, headers=headers, timeout=10)
+    if data:
+        username = data.get("username", "N/A")
+        password = data.get("password", "N/A")
+        dns_link = data.get("dns_link", "N/A")
+        expiring_at = data.get("expiring_at", "N/A")
 
-        if response.status_code == 200:
-            data = response.json()
-            
-            username = data.get("username", "N/A")
-            password = data.get("password", "N/A")
-            dns_link = data.get("dns_link", "N/A")
-            expiring_at = data.get("expiring_at", "N/A")
-            
-            msg = (
-                f"📺 *TUS DATOS DE ACCESO*\n\n"
-                f"👤 *Usuario:* `{username}`\n"
-                f"🔑 *Contraseña:* `{password}`\n"
-                f"🌐 *URL / Server:* `{dns_link}`\n"
-                f"📅 *Caduca el:* `{expiring_at}`"
-            )
-            
-            await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
-        else:
-            logging.error(f"Error API MegaOTT HTTP {response.status_code}: {response.text}")
-            await update.message.reply_text(
-                f"⚠️ Error al obtener datos de la API (Código HTTP: {response.status_code}).\n"
-                f"Asegúrate de que el ID guardado (`{sub_id}`) sea el ID numérico interno de la suscripción.",
-                parse_mode="Markdown",
-                reply_markup=get_main_keyboard()
-            )
-    except Exception as e:
-        logging.error(f"Error consultando la API MegaOTT: {e}")
+        msg = (
+            f"📺 *TUS DATOS DE ACCESO*\n\n"
+            f"👤 *Usuario:* `{username}`\n"
+            f"🔑 *Contraseña:* `{password}`\n"
+            f"🌐 *URL / Server:* `{dns_link}`\n"
+            f"📅 *Caduca el:* `{expiring_at}`"
+        )
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
+    else:
         await update.message.reply_text(
-            "❌ No se pudo conectar con el servidor. Inténtalo de nuevo en unos minutos.",
+            f"⚠️ No se encontraron datos para el ID (`{sub_id}`) en ninguna de las cuentas registradas.",
+            parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
 
