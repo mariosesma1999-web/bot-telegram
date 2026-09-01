@@ -179,6 +179,7 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
         username = data.get("username", "N/A")
         password = data.get("password", "N/A")
         dns_link = data.get("dns_link", "N/A")
+        dns_samsung_lg = data.get("dns_link_for_samsung_lg", "N/A")
         expiring_at = data.get("expiring_at", "N/A")
 
         msg = (
@@ -186,6 +187,7 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
             f"👤 *Usuario:* `{username}`\n"
             f"🔑 *Contraseña:* `{password}`\n"
             f"🌐 *URL / Server:* `{dns_link}`\n"
+            f"📺 *URL Samsung / LG:* `{dns_samsung_lg}`\n"
             f"📅 *Caduca el:* `{expiring_at}`"
         )
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
@@ -195,7 +197,6 @@ async def handle_refrescar_codigos(update: Update, context: ContextTypes.DEFAULT
             parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
-
 
 async def handle_renovacion_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
