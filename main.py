@@ -41,9 +41,8 @@ URL_VIDEO_SMARTTV = "https://www.youtube.com/watch?v=_45J8kBu2CY"
 
 # URLs o File IDs de las 3 imágenes de configuración
 IMAGENES_CONFIGURACION = [
-    "https://via.placeholder.com/800x600.png?text=Paso+1+Configuracion",
-    "https://via.placeholder.com/800x600.png?text=Paso+2+Configuracion",
-    "https://via.placeholder.com/800x600.png?text=Paso+3+Configuracion"
+    "https://imgur.com/YfHw9ny",
+    "https://imgur.com/foxLHpT"
 ]
 
 
@@ -339,8 +338,7 @@ async def handle_guia_callbacks(update: Update, context: ContextTypes.DEFAULT_TY
         # Preparamos el grupo de imágenes en álbum (MediaGroup)
         media = [
             InputMediaPhoto(media=IMAGENES_CONFIGURACION[0], caption="⚙️ *PASOS DE CONFIGURACIÓN*\n\n1. Sigue las instrucciones de cada captura.", parse_mode="Markdown"),
-            InputMediaPhoto(media=IMAGENES_CONFIGURACION[1]),
-            InputMediaPhoto(media=IMAGENES_CONFIGURACION[2])
+            InputMediaPhoto(media=IMAGENES_CONFIGURACION[1])
         ]
 
         # Enviamos las 3 imágenes en un solo mensaje de tipo álbum
